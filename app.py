@@ -2,6 +2,8 @@
 
 from flask import Flask, render_template, request, jsonify, session, g
 import os
+import re
+import asyncio
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
@@ -11,18 +13,25 @@ from langchain.chains import LLMChain
 from langchain.chains.retrieval_qa.base import RetrievalQA
 from langchain_community.retrievers import BM25Retriever
 from langchain.retrievers import EnsembleRetriever
-
 from langchain.retrievers.document_compressors import LLMChainExtractor
-import re
 from werkzeug.middleware.proxy_fix import ProxyFix
+
+# ---------------------------
+# Fix: Ensure each waitress thread has an event loop
+# ---------------------------
+try:
+    asyncio.get_running_loop()
+except RuntimeError:
+    asyncio.set_event_loop(asyncio.new_event_loop())
+# ---------------------------
 
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'default-secret-key')
 app.wsgi_app = ProxyFix(app.wsgi_app)
 
-os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY", "AIzaSyDoVdAvZXiHVdzZck30JtUkTXBmbvPJgJU")
+os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
 
-# Load once and cache in app context
+# Load once and cache in app context    
 def get_embedding_model():
     if 'embedding_model' not in g:
         g.embedding_model = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
@@ -66,7 +75,7 @@ def get_ensemble_retriever():
 
 def get_llm_chain():
     if 'llm_chain' not in g:
-        llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash", temperature=0.1, max_tokens=1000)
+        llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash", temperature=0.1, max_output_tokens=1000)
         prompt = PromptTemplate.from_template("""
 You are an expert XID FAQ assistant. Your task is to provide precise, relevant answers based solely on the provided context. Also if someone is greeting you, greet them back
 ANALYSIS INSTRUCTIONS:
@@ -163,7 +172,5 @@ def health():
 
 if __name__ == "__main__":
     from waitress import serve
-    import os
     port = int(os.environ.get("PORT", 5000))
     serve(app, host="0.0.0.0", port=port)
-
