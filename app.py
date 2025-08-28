@@ -1,8 +1,5 @@
-# xid_faq_bot_app.py
-
 from flask import Flask, render_template, request, jsonify, session, g
 import os
-import re
 import asyncio
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -13,17 +10,9 @@ from langchain.chains import LLMChain
 from langchain.chains.retrieval_qa.base import RetrievalQA
 from langchain_community.retrievers import BM25Retriever
 from langchain.retrievers import EnsembleRetriever
-from langchain.retrievers.document_compressors import LLMChainExtractor
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-# ---------------------------
-# Fix: Ensure each waitress thread has an event loop
-# ---------------------------
-try:
-    asyncio.get_running_loop()
-except RuntimeError:
-    asyncio.set_event_loop(asyncio.new_event_loop())
-# ---------------------------
+import re
 
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'default-secret-key')
@@ -31,13 +20,23 @@ app.wsgi_app = ProxyFix(app.wsgi_app)
 
 os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
 
+# Ensure every thread has an event loop
+def ensure_event_loop():
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
 # Load once and cache in app context    
 def get_embedding_model():
+    ensure_event_loop()
     if 'embedding_model' not in g:
         g.embedding_model = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
     return g.embedding_model
 
 def load_vectorstore():
+    ensure_event_loop()
     file_path = "XID Creation-Modification FAQs - Updated.pdf"
     vectorstore_path = "xid_faqs_vectorstore_enhanced"
     embedding_model = get_embedding_model()
@@ -64,6 +63,7 @@ def load_vectorstore():
         return db
 
 def get_ensemble_retriever():
+    ensure_event_loop()
     if 'retriever' not in g:
         db = load_vectorstore()
         vector_retriever = db.as_retriever(search_type="mmr", search_kwargs={"k": 8, "fetch_k": 20, "lambda_mult": 0.7})
@@ -72,10 +72,9 @@ def get_ensemble_retriever():
         bm25.k = 8
         g.retriever = EnsembleRetriever(retrievers=[vector_retriever, bm25], weights=[0.6, 0.4])
     return g.retriever
-
 def get_llm_chain():
     if 'llm_chain' not in g:
-        llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash", temperature=0.1, max_output_tokens=1000)
+        llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash", temperature=0.1, max_tokens=1000)
         prompt = PromptTemplate.from_template("""
 You are an expert XID FAQ assistant. Your task is to provide precise, relevant answers based solely on the provided context. Also if someone is greeting you, greet them back
 ANALYSIS INSTRUCTIONS:
@@ -125,6 +124,7 @@ def format_history(msgs):
     return "\n".join(hist)
 
 def get_answer(q, chat_history):
+    ensure_event_loop()
     retriever = get_ensemble_retriever()
     db = load_vectorstore()
     docs = retriever.invoke(q)
@@ -145,6 +145,7 @@ def index():
 
 @app.route('/chat', methods=['POST'])
 def chat():
+    ensure_event_loop()
     try:
         user_message = request.get_json().get('message', '').strip()
         if not user_message:
