@@ -6,6 +6,7 @@ langchain-community
 langchain-google-genai
 faiss-cpu
 rank-bm25
+pypdf
 
 
 
