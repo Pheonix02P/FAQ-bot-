@@ -38,7 +38,7 @@ def get_embedding_model():
 def load_vectorstore():
     ensure_event_loop()
     file_path = "XID Creation-Modification FAQs - Updated.pdf"
-    vectorstore_path = "xid_faqs_vectorstore_enhanced"
+    vectorstore_path = "xid_faqs_vectorstore_enhanced_v2"
     embedding_model = get_embedding_model()
 
     if os.path.exists(vectorstore_path):
@@ -198,4 +198,5 @@ if __name__ == "__main__":
     from waitress import serve
     port = int(os.environ.get("PORT", 5000))
     serve(app, host="0.0.0.0", port=port)
+
 
