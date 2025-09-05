@@ -38,7 +38,7 @@ def get_embedding_model():
 def load_vectorstore():
     ensure_event_loop()
     file_path = "XID Creation-Modification FAQs - Updated.pdf"
-    vectorstore_path = "xid_faqs_vectorstore_enhanced_v2"
+    vectorstore_path = "xid_faqs_vectorstore_enhanced"
     embedding_model = get_embedding_model()
 
     if os.path.exists(vectorstore_path):
